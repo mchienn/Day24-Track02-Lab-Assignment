@@ -28,5 +28,15 @@
 | Audit logging | CloudTrail + API access logs | ⬜ Todo | Platform Team |
 | Breach detection | Anomaly monitoring (Prometheus) | ⬜ Todo | Security Team |
 
-## F. TODO: Điền vào phần còn thiếu
-Với mỗi row còn "⬜ Todo", mô tả technical solution cụ thể bạn sẽ implement.
+## F. Technical Solutions for Todo Items
+
+### Audit logging
+Implement centralized audit logging using AWS CloudTrail for infrastructure-level API calls combined with application-level structured logging via FastAPI middleware. Each access to patient data will log: user_id, action, resource, timestamp, IP address, and outcome (allow/deny). Logs will be stored in immutable S3 bucket with 1-year retention and integrated with SIEM for alerting.
+
+### Breach detection
+Deploy Prometheus + Grafana monitoring stack with custom alert rules:
+- Monitor API request patterns (unusual spike in 403 errors → potential scanning)
+- Track data export volume anomalies (sudden large CSV downloads)
+- Set up Prometheus AlertManager for real-time notifications via PagerDuty/Slack
+- Integrate with OPA for runtime access pattern analysis
+- Implement 72-hour breach notification workflow: detection → containment → forensic analysis → regulatory reporting

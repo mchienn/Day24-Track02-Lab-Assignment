@@ -1,4 +1,5 @@
-# src/pii/anonymizer.py
+import random
+
 import pandas as pd
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
@@ -7,46 +8,53 @@ from .detector import build_vietnamese_analyzer, detect_pii
 
 fake = Faker("vi_VN")
 
+
 class MedVietAnonymizer:
 
     def __init__(self):
         self.analyzer = build_vietnamese_analyzer()
         self.anonymizer = AnonymizerEngine()
 
-    def anonymize_text(self, text: str, strategy: str = "replace") -> str:
-        """
-        TODO: Anonymize text với strategy được chọn.
+    def _fake_cccd(self) -> str:
+        return f"{random.randint(0, 9)}{''.join([str(random.randint(0, 9)) for _ in range(11)])}"
 
-        Strategies:
-        - "mask"    : Nguyen Van A → N****** V** A
-        - "replace" : thay bằng fake data (dùng Faker)
-        - "hash"    : SHA-256 one-way hash
-        - "generalize": chỉ dùng cho tuổi/năm sinh
-        """
+    def _fake_phone(self) -> str:
+        return f"0{random.choice([3, 5, 7, 8, 9])}{''.join([str(random.randint(0, 9)) for _ in range(8)])}"
+
+    def anonymize_text(self, text: str, strategy: str = "replace") -> str:
         results = detect_pii(text, self.analyzer)
         if not results:
             return text
 
-        # TODO: implement operators dict dựa trên strategy
         operators = {}
 
         if strategy == "replace":
             operators = {
-                "PERSON": OperatorConfig("replace", 
+                "PERSON": OperatorConfig("replace",
                           {"new_value": fake.name()}),
-                "EMAIL_ADDRESS": OperatorConfig("replace", 
-                                 {"new_value": ___}),   # TODO: fake email
-                "VN_CCCD": OperatorConfig("replace", 
-                           {"new_value": ___}),          # TODO: fake CCCD
-                "VN_PHONE": OperatorConfig("replace", 
-                            {"new_value": ___}),         # TODO: fake phone
+                "EMAIL_ADDRESS": OperatorConfig("replace",
+                                 {"new_value": fake.email()}),
+                "VN_CCCD": OperatorConfig("replace",
+                           {"new_value": self._fake_cccd()}),
+                "VN_PHONE": OperatorConfig("replace",
+                            {"new_value": self._fake_phone()}),
             }
         elif strategy == "mask":
-            # TODO: implement masking
-            pass
+            operators = {
+                "PERSON": OperatorConfig("mask", {"masking_char": "*", "chars_to_mask": 0, "from_end": False}),
+                "EMAIL_ADDRESS": OperatorConfig("mask", {"masking_char": "*", "chars_to_mask": 0, "from_end": False}),
+                "VN_CCCD": OperatorConfig("mask", {"masking_char": "*", "chars_to_mask": 4, "from_end": True}),
+                "VN_PHONE": OperatorConfig("mask", {"masking_char": "*", "chars_to_mask": 4, "from_end": True}),
+            }
         elif strategy == "hash":
-            # TODO: implement hashing dùng sha256
-            pass
+            operators = {
+                "PERSON": OperatorConfig("hash"),
+                "EMAIL_ADDRESS": OperatorConfig("hash"),
+                "VN_CCCD": OperatorConfig("hash"),
+                "VN_PHONE": OperatorConfig("hash"),
+            }
+        else:
+            raise ValueError(f"Unknown anonymization strategy: {strategy}")
 
         anonymized = self.anonymizer.anonymize(
             text=text,
@@ -56,30 +64,25 @@ class MedVietAnonymizer:
         return anonymized.text
 
     def anonymize_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        TODO: Anonymize toàn bộ DataFrame.
-        - Cột text (ho_ten, dia_chi, email): dùng anonymize_text()
-        - Cột cccd, so_dien_thoai: replace trực tiếp bằng fake data
-        - Cột benh, ket_qua_xet_nghiem: GIỮ NGUYÊN (cần cho model training)
-        - Cột patient_id: GIỮ NGUYÊN (pseudonym đã đủ an toàn)
-        """
         df_anon = df.copy()
 
-        # TODO: Xử lý từng cột PII
-        # Gợi ý: dùng df.apply() hoặc list comprehension
+        df_anon["ho_ten"] = df_anon["ho_ten"].apply(
+            lambda x: self.anonymize_text(str(x), "replace")
+        )
+        df_anon["dia_chi"] = df_anon["dia_chi"].apply(
+            lambda x: self.anonymize_text(str(x), "replace")
+        )
+        df_anon["email"] = df_anon["email"].apply(
+            lambda x: self.anonymize_text(str(x), "replace")
+        )
+        df_anon["cccd"] = df_anon["cccd"].apply(lambda x: self._fake_cccd())
+        df_anon["so_dien_thoai"] = df_anon["so_dien_thoai"].apply(lambda x: self._fake_phone())
 
         return df_anon
 
-    def calculate_detection_rate(self, 
+    def calculate_detection_rate(self,
                                   original_df: pd.DataFrame,
                                   pii_columns: list) -> float:
-        """
-        TODO: Tính % PII được detect thành công.
-        Mục tiêu: > 95%
-
-        Logic: với mỗi ô trong pii_columns,
-               kiểm tra xem detect_pii() có tìm thấy ít nhất 1 entity không.
-        """
         total = 0
         detected = 0
 
